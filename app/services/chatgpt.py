@@ -135,7 +135,9 @@ class ChatGPTService:
                     error_code = None
                     try:
                         error_data = response.json()
-                        error_msg = error_data.get("detail", error_msg)
+                        detail = error_data.get("detail", error_msg)
+                        # 确保 error_msg 是字符串，避免前端显示 [object Object]
+                        error_msg = str(detail) if not isinstance(detail, str) else detail
                         if isinstance(error_data, dict):
                             error_info = error_data.get("error")
                             error_code = error_info.get("code") if isinstance(error_info, dict) else error_data.get("code")
@@ -321,14 +323,29 @@ class ChatGPTService:
             
             response = await session.get(url, headers=headers)
             if response.status_code == 200:
-                data = response.json()
+                try:
+                    data = response.json()
+                except Exception:
+                    return {"success": False, "error": "无法解析会话 JSON 响应"}
+                
                 at = data.get("accessToken")
                 st = data.get("sessionToken")
                 if at:
                     return {"success": True, "access_token": at, "session_token": st}
-                return {"success": False, "error": "响应中未包含 accessToken"}
+                
+                # 如果 200 但没有 token，可能是被拦截或格式变了
+                error_msg = str(data.get("detail") or data.get("error") or "响应中未包含 accessToken")
+                return {"success": False, "error": error_msg}
             else:
-                return {"success": False, "status_code": response.status_code, "error": response.text}
+                error_text = response.text
+                try:
+                    error_data = response.json()
+                    error_msg = error_data.get("detail") or error_data.get("error") or error_text
+                    if not isinstance(error_msg, str):
+                        error_msg = str(error_msg)
+                except:
+                    error_msg = error_text
+                return {"success": False, "status_code": response.status_code, "error": error_msg}
         except Exception as e:
             return {"success": False, "error": str(e)}
 
